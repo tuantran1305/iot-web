@@ -30,7 +30,7 @@ const Navbar = () => {
         });
     };
     getData();
-  }, []);
+  }, [router]);
 
   return (
     <div className="border-b bg-gradient-to-r from-blue-50 to-purple-50">

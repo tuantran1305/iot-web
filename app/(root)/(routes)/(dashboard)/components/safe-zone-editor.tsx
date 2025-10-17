@@ -15,7 +15,7 @@ const SafeZoneEditor: React.FC<SafeZoneEditorProps> = ({ safe_zone, onSave }) =>
   const [editData, setEditData] = useState<any[]>([]);
 
   // Parse safe_zone
-  let safeZoneArray = [];
+  let safeZoneArray: any[] = [];
   if (typeof safe_zone === "string") {
     try {
       safeZoneArray = JSON.parse(safe_zone);
