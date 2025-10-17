@@ -1,4 +1,4 @@
-import { thingsboard } from "@/lib/tbClient";
+import axios from "axios";
 import { Loader } from "lucide-react";
 import moment from "moment";
 import { redirect } from "next/navigation";
@@ -42,19 +42,15 @@ const TelemetryChart = ({
     }
     const getData = async () => {
       setLoading(true);
-      const data = await thingsboard.telemetry().getTimeseries(
+      const resp = await axios.post(`/api/telemetry/timeseries`, {
         token,
-        {
-          entityId,
-          entityType,
-        },
-        {
-          keys: targetkey,
-          startTs,
-          endTs,
-        }
-      );
-      const formatData = formattedData(label, targetkey, data);
+        entityId,
+        entityType,
+        keys: targetkey,
+        startTs,
+        endTs,
+      });
+      const formatData = formattedData(label, targetkey, resp.data);
       setData(formatData);
       setLoading(false);
     };

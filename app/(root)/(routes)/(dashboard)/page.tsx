@@ -43,7 +43,9 @@ const DashboardPage = () => {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const socketUrl = `wss://${tbServer}/api/ws/plugins/telemetry?token=${token}`;
+    // Prefer secure WS if the page is served over HTTPS and server supports it
+    const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
+    const socketUrl = `${protocol}://${tbServer}/api/ws/plugins/telemetry?token=${token}`;
     setSocketUrl(socketUrl);
   }, []);
   const { getWebSocket } = useWebSocket(socketUrl != "" ? socketUrl : null, {
@@ -95,6 +97,10 @@ const DashboardPage = () => {
           { ts: obj?.["longitude"]?.[0][0], value: obj?.["longitude"]?.[0][1] },
         ],
       });
+    },
+    onError: () => {
+      // Fallback: when WS fails (e.g., HTTPS-only context + ws server), disable WS by clearing URL
+      setSocketUrl("");
     },
     onClose: () => {},
   }) as any;
@@ -211,20 +217,14 @@ const DashboardPage = () => {
     if (!token) {
       redirect("/login");
     }
-
-    await thingsboard
-      .telemetry()
-      .saveEntityAttributesV2(
+    await axios
+      .post(`/api/telemetry/attribute/save`, {
         token,
-        {
-          entityId: deviceId,
-          entityType: TbEntity.DEVICE,
-          scope: "SHARED_SCOPE",
-        },
-        {
+        deviceId,
+        payload: {
           ...data,
-        }
-      )
+        },
+      })
       .then(() => {
         toast.success("Lưu thành công");
         setSaveState(!saveState);

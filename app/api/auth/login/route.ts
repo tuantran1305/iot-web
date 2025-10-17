@@ -7,8 +7,15 @@ export async function POST(req: Request) {
     const resp = await thingsboard.loginEndpoint().login(data);
     return NextResponse.json(resp);
   } catch (err: any) {
-    return NextResponse.json(err.response.data, {
-      status: err.response.status,
-    });
+    if (err?.response) {
+      return NextResponse.json(err.response.data, {
+        status: err.response.status,
+      });
+    }
+    console.error("/api/auth/login error", err);
+    return NextResponse.json(
+      { message: err?.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

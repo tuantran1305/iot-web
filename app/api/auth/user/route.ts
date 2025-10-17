@@ -8,8 +8,15 @@ export async function POST(req: Request) {
     const resp = await thingsboard.auth().getUser(token);
     return NextResponse.json(resp);
   } catch (err: any) {
-    return NextResponse.json(err.response.data, {
-      status: err.response.status,
-    });
+    if (err?.response) {
+      return NextResponse.json(err.response.data, {
+        status: err.response.status,
+      });
+    }
+    console.error("/api/auth/user error", err);
+    return NextResponse.json(
+      { message: err?.message || "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
