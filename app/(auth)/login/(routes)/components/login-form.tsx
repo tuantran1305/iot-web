@@ -62,7 +62,11 @@ const LoginForm = () => {
       })
       .catch((error) => {
         console.error(error);
-        toast.error("Có Lỗi Xảy Ra");
+        const msg =
+          (error?.response?.data && (error.response.data.message || JSON.stringify(error.response.data))) ||
+          error?.message ||
+          "Có Lỗi Xảy Ra";
+        toast.error(msg);
       })
       .finally(() => {
         setLoading(false);

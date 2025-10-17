@@ -1,3 +1,4 @@
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Loader } from "lucide-react";
@@ -61,4 +62,4 @@ const LatestTelemetryCard: React.FC<LatestTelemetryCardProps> = ({
   );
 };
 
-export default LatestTelemetryCard;
+export default React.memo(LatestTelemetryCard);

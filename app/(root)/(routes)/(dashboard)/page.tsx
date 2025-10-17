@@ -7,10 +7,10 @@ import { config } from "@/lib/config";
 import { thingsboard } from "@/lib/tbClient";
 import { cn } from "@/lib/utils";
 import axios from "axios";
-import { BellIcon, Grab, Heart, Thermometer, User2Icon } from "lucide-react";
+import { BellIcon, Grab, Heart, Thermometer, User2Icon, Activity, Droplets } from "lucide-react";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import toast from "react-hot-toast";
 import useWebSocket from "react-use-websocket";
 import { TbEntity } from "thingsboard-api-client";
@@ -18,6 +18,7 @@ import InputThreshold from "./components/input-threshold";
 import LatestTelemetryCard from "./components/latest-telemetry-card";
 import TelemetryTable from "./components/telemetry-table";
 import TelemetryChart from "./components/telemetry-chart";
+import SafeZoneEditor from "./components/safe-zone-editor";
 
 const { deviceId, tbServer } = config;
 const keys = "heartRate,SPO2,temperature,longitude,latitude,fallState";
@@ -38,7 +39,6 @@ const DashboardPage = () => {
   const [attribute, setAttribute] = useState() as any;
   const [socketUrl, setSocketUrl] = useState("");
   const [saveState, setSaveState] = useState(false);
-  const [ping, setPing] = useState(false);
   const [edit, setEdit] = useState({ key: "", value: "" });
 
   useEffect(() => {
@@ -67,35 +67,29 @@ const DashboardPage = () => {
     },
     onMessage: (event) => {
       let obj = JSON.parse(event.data).data;
-      setPing(!ping);
-      setLatestData({
-        ...latestData,
-        heartRate: [
-          {
-            ts: obj?.["heartRate"]
-              ? obj?.["heartRate"]?.[0][0]
-              : latestData["heartRate"][0].ts,
-            value: obj?.["heartRate"]
-              ? obj?.["heartRate"]?.[0][1]
-              : latestData["heartRate"][0].value,
-          },
-        ],
-        SPO2: [{ ts: obj?.["SPO2"]?.[0][0], value: obj?.["SPO2"]?.[0][1] }],
-        temperature: [
-          {
-            ts: obj?.["temperature"]?.[0][0],
-            value: obj?.["temperature"]?.[0][1],
-          },
-        ],
-        fallState: [
-          { ts: obj?.["fallState"]?.[0][0], value: obj?.["fallState"]?.[0][1] },
-        ],
-        latitude: [
-          { ts: obj?.["latitude"]?.[0][0], value: obj?.["latitude"]?.[0][1] },
-        ],
-        longitude: [
-          { ts: obj?.["longitude"]?.[0][0], value: obj?.["longitude"]?.[0][1] },
-        ],
+      setLatestData((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          heartRate: obj?.["heartRate"] 
+            ? [{ ts: obj["heartRate"][0][0], value: obj["heartRate"][0][1] }]
+            : prev.heartRate,
+          SPO2: obj?.["SPO2"]
+            ? [{ ts: obj["SPO2"][0][0], value: obj["SPO2"][0][1] }]
+            : prev.SPO2,
+          temperature: obj?.["temperature"]
+            ? [{ ts: obj["temperature"][0][0], value: obj["temperature"][0][1] }]
+            : prev.temperature,
+          fallState: obj?.["fallState"]
+            ? [{ ts: obj["fallState"][0][0], value: obj["fallState"][0][1] }]
+            : prev.fallState,
+          latitude: obj?.["latitude"]
+            ? [{ ts: obj["latitude"][0][0], value: obj["latitude"][0][1] }]
+            : prev.latitude,
+          longitude: obj?.["longitude"]
+            ? [{ ts: obj["longitude"][0][0], value: obj["longitude"][0][1] }]
+            : prev.longitude,
+        };
       });
     },
     onError: () => {
@@ -165,7 +159,7 @@ const DashboardPage = () => {
 
   const now = Date.now();
 
-  const onSave = async () => {
+  const onSave = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) {
       redirect("/login");
@@ -182,7 +176,7 @@ const DashboardPage = () => {
       })
       .then(() => {
         toast.success("Lưu ngưỡng thành công");
-        setSaveState(!saveState);
+        setSaveState((prev) => !prev);
       })
       .catch((error) => {
         console.error({ error });
@@ -191,28 +185,24 @@ const DashboardPage = () => {
       .finally(() => {
         setEdit({ key: "", value: "" });
       });
-  };
+  }, [attribute, edit]);
 
-  const [table, setTable] = useState() as any;
-
-  useEffect(() => {
-    const html = (
-      <TelemetryTable
-        entityId={deviceId}
-        entityType={TbEntity.DEVICE}
-        keys={keys}
-        startTs={0}
-        endTs={now}
-      />
-    );
-    setTable(html);
-  }, [ping]);
+  // Memoize table to avoid re-render on every ping
+  const table = useMemo(() => (
+    <TelemetryTable
+      entityId={deviceId}
+      entityType={TbEntity.DEVICE}
+      keys={keys}
+      startTs={0}
+      endTs={now}
+    />
+  ), [now]);
 
   const Maps = dynamic(() => import("./components/maps"), {
     ssr: false,
   });
 
-  const onClickDevice = async (data: any) => {
+  const onClickDevice = useCallback(async (data: any) => {
     const token = localStorage.getItem("token");
     if (!token) {
       redirect("/login");
@@ -227,21 +217,21 @@ const DashboardPage = () => {
       })
       .then(() => {
         toast.success("Lưu thành công");
-        setSaveState(!saveState);
+        setSaveState((prev) => !prev);
       })
       .catch((error) => {
         console.error({ error });
         toast.error("Có lỗi xảy ra");
       })
       .finally(() => {});
-  };
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-2 grid-cols-1">
         <LatestTelemetryCard
           title="Nhiệt độ cơ thể"
-          icon={<Thermometer className="h-8 w-8 text-muted-foreground" />}
+          icon={<Thermometer className="h-8 w-8 text-red-500" />}
           data={latestData?.["temperature"][0]}
           loading={loading}
           unit="°C"
@@ -267,7 +257,7 @@ const DashboardPage = () => {
         </LatestTelemetryCard>
         <LatestTelemetryCard
           title="Trạng thái ngã"
-          icon={<Grab className="h-8 w-8 text-muted-foreground" />}
+          icon={<Activity className="h-8 w-8 text-orange-500" />}
           data={latestData?.["fallState"][0]}
           loading={loading}
           isBoolean
@@ -275,7 +265,7 @@ const DashboardPage = () => {
         />
         <LatestTelemetryCard
           title="SpO2"
-          icon={<Grab className="h-8 w-8 text-muted-foreground" />}
+          icon={<Droplets className="h-8 w-8 text-blue-500" />}
           data={latestData?.["SPO2"][0]}
           isInteger={true}
           loading={loading}
@@ -312,7 +302,7 @@ const DashboardPage = () => {
         </LatestTelemetryCard>
         <LatestTelemetryCard
           title="Nhịp tim"
-          icon={<Heart className="h-8 w-8 text-muted-foreground" />}
+          icon={<Heart className="h-8 w-8 text-pink-500" />}
           data={latestData?.["heartRate"][0]}
           loading={loading}
           isInteger={true}
@@ -350,7 +340,7 @@ const DashboardPage = () => {
         </LatestTelemetryCard>
         <LatestTelemetryCard
           title="Chuông"
-          icon={<BellIcon className="h-8 w-8 text-muted-foreground" />}
+          icon={<BellIcon className="h-8 w-8 text-yellow-500" />}
           data={attribute?.["buzzer"]}
           loading={loading}
           isBoolean={true}
@@ -375,7 +365,7 @@ const DashboardPage = () => {
         </LatestTelemetryCard>
         <LatestTelemetryCard
           title="Người Thân"
-          icon={<User2Icon className="h-8 w-8 text-muted-foreground" />}
+          icon={<User2Icon className="h-8 w-8 text-green-500" />}
           loading={loading}
           isBoolean={true}
         >
@@ -454,6 +444,31 @@ const DashboardPage = () => {
           />
         </CardContent>
       </Card>
+      <SafeZoneEditor
+        safe_zone={attribute?.["safe_zone"]}
+        onSave={async (newSafeZone) => {
+          const token = localStorage.getItem("token");
+          if (!token) {
+            redirect("/login");
+          }
+          await axios
+            .post(`/api/telemetry/attribute/save`, {
+              token,
+              deviceId,
+              payload: {
+                safe_zone: JSON.stringify(newSafeZone),
+              },
+            })
+            .then(() => {
+              toast.success("Lưu vị trí an toàn thành công");
+              setSaveState(!saveState);
+            })
+            .catch((error) => {
+              console.error({ error });
+              toast.error("Có lỗi xảy ra");
+            });
+        }}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Bảng Dữ Liệu</CardTitle>
