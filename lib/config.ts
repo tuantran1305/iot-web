@@ -1,9 +1,9 @@
 const config = {
   // tbServer: "thingsboard.cloud",
   // tbServer: "212.38.94.144:8081",
-  tbServer: "72.60.209.148",
+  tbServer: "thingsboard.cloud",
   // tbServer: "thingsboard.srv524038.hstgr.cloud",
-  deviceId: "034a74f0-ab50-11f0-8b25-c348808b6e0d",
+  deviceId: "75c1a771-ab59-11f0-b150-2710a8915e1d",
 };
 
 export { config };

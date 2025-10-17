@@ -42,7 +42,7 @@ const LoginForm = () => {
     resolver: zodResolver(LoginFormSchema),
     mode: "onBlur",
     defaultValues: {
-      username: "trungnguyen@gmail.com",
+      username: "tuan.tran.uht@gmail.com",
       password: "12345678",
     },
   });
