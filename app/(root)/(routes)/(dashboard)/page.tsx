@@ -267,13 +267,6 @@ const DashboardPage = () => {
           booleanArr={["Có", "Không"]}
         />
         <LatestTelemetryCard
-          title="Thời gian trong nước"
-          icon={<Activity className="h-8 w-8 text-orange-500" />}
-          data={latestData?.["waterDuration"][0]}
-          loading={loading}
-          unit=" giây"
-        />
-        <LatestTelemetryCard
           title="SpO2"
           icon={<Droplets className="h-8 w-8 text-blue-500" />}
           data={latestData?.["SPO2"][0]}
@@ -348,6 +341,13 @@ const DashboardPage = () => {
             />
           </div>
         </LatestTelemetryCard>
+        <LatestTelemetryCard
+          title="Thời gian trong nước"
+          icon={<Activity className="h-8 w-8 text-orange-500" />}
+          data={latestData?.["waterDuration"][0]}
+          loading={loading}
+          unit=" giây"
+        />
         <LatestTelemetryCard
           title="Chuông"
           icon={<BellIcon className="h-8 w-8 text-yellow-500" />}
