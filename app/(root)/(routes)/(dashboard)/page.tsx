@@ -21,7 +21,7 @@ import TelemetryChart from "./components/telemetry-chart";
 import SafeZoneEditor from "./components/safe-zone-editor";
 
 const { deviceId, tbServer } = config;
-const keys = "heartRate,SPO2,temperature,longitude,latitude,fallState";
+const keys = "heartRate,SPO2,temperature,longitude,latitude,waterDetected,waterDuration";
 const attrKeys =
   "temperature_threshold_upper,spo2_upper,spo2_lower,heartrate_threshold_upper,heartrate_threshold_lower,buzzer,phone,alert,safe_zone";
 
@@ -80,9 +80,12 @@ const DashboardPage = () => {
           temperature: obj?.["temperature"]
             ? [{ ts: obj["temperature"][0][0], value: obj["temperature"][0][1] }]
             : prev.temperature,
-          fallState: obj?.["fallState"]
-            ? [{ ts: obj["fallState"][0][0], value: obj["fallState"][0][1] }]
-            : prev.fallState,
+          waterDetected: obj?.["waterDetected"]
+            ? [{ ts: obj["waterDetected"][0][0], value: obj["waterDetected"][0][1] }]
+            : prev.waterDetected,
+          waterDuration: obj?.["waterDuration"]
+            ? [{ ts: obj["waterDuration"][0][0], value: obj["waterDuration"][0][1] }]
+            : prev.waterDuration,
           latitude: obj?.["latitude"]
             ? [{ ts: obj["latitude"][0][0], value: obj["latitude"][0][1] }]
             : prev.latitude,
@@ -256,12 +259,19 @@ const DashboardPage = () => {
           </div>
         </LatestTelemetryCard>
         <LatestTelemetryCard
-          title="Trạng thái ngã"
-          icon={<Activity className="h-8 w-8 text-orange-500" />}
-          data={latestData?.["fallState"][0]}
+          title="Phát hiện nước"
+          icon={<Activity className="h-8 w-8 text-blue-500" />}
+          data={latestData?.["waterDetected"][0]}
           loading={loading}
           isBoolean
           booleanArr={["Có", "Không"]}
+        />
+        <LatestTelemetryCard
+          title="Thời gian trong nước"
+          icon={<Activity className="h-8 w-8 text-orange-500" />}
+          data={latestData?.["waterDuration"][0]}
+          loading={loading}
+          unit=" giây"
         />
         <LatestTelemetryCard
           title="SpO2"
@@ -426,6 +436,21 @@ const DashboardPage = () => {
               entityType={TbEntity.DEVICE}
               label={"Nhịp Tim"}
               targetkey={"heartRate"}
+              startTs={0}
+              endTs={now}
+            />
+          </CardContent>
+        </Card>
+        <Card className="col-span-full">
+          <CardHeader>
+            <CardTitle>Biểu Đồ Thời Gian Trong Nước</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TelemetryChart
+              entityId={deviceId}
+              entityType={TbEntity.DEVICE}
+              label={"Thời Gian Trong Nước (giây)"}
+              targetkey={"waterDuration"}
               startTs={0}
               endTs={now}
             />

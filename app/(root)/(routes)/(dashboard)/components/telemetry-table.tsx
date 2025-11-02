@@ -87,6 +87,23 @@ const TelemetryTable = ({
       header: "Nhiệt độ cơ thể (°C)",
     },
     {
+      accessorKey: "waterDetected",
+      header: "Phát hiện nước",
+      cell: ({ row }) => {
+        const value = row.getValue("waterDetected");
+        if (value === "true" || value === true) {
+          return <span className="text-blue-600 font-medium">Có</span>;
+        } else if (value === "false" || value === false) {
+          return <span className="text-gray-600">Không</span>;
+        }
+        return <span className="text-gray-400">-</span>;
+      },
+    },
+    {
+      accessorKey: "waterDuration",
+      header: "Thời gian trong nước (giây)",
+    },
+    {
       accessorKey: "ts",
       header: "Thời gian cập nhật",
     },
