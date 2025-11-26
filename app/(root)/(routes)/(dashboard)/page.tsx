@@ -190,6 +190,31 @@ const DashboardPage = () => {
       });
   }, [attribute, edit]);
 
+  const onToggleSetZone = useCallback(async (value: boolean) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      redirect("/login");
+    }
+
+    await axios
+      .post(`/api/telemetry/attribute/save`, {
+        token,
+        deviceId,
+        payload: {
+          ...attribute,
+          set_zone: value ? "true" : "false",
+        },
+      })
+      .then(() => {
+        toast.success("Cập nhật chế độ vùng an toàn");
+        setSaveState((prev) => !prev);
+      })
+      .catch((error) => {
+        console.error({ error });
+        toast.error("Không thể thay đổi chế độ vùng");
+      });
+  }, [attribute]);
+
   // Memoize table to avoid re-render on every ping
   const table = useMemo(() => (
     <TelemetryTable
@@ -471,6 +496,8 @@ const DashboardPage = () => {
       </Card>
       <SafeZoneEditor
         safe_zone={attribute?.["safe_zone"]}
+        set_zone={attribute?.["set_zone"]}
+        onToggleSetZone={onToggleSetZone}
         onSave={async (newSafeZone) => {
           const token = localStorage.getItem("token");
           if (!token) {

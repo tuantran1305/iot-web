@@ -8,9 +8,11 @@ import { useState } from "react";
 interface SafeZoneEditorProps {
   safe_zone: any;
   onSave: (newSafeZone: any[]) => void;
+  set_zone?: boolean | string;
+  onToggleSetZone?: (value: boolean) => void;
 }
 
-const SafeZoneEditor: React.FC<SafeZoneEditorProps> = ({ safe_zone, onSave }) => {
+const SafeZoneEditor: React.FC<SafeZoneEditorProps> = ({ safe_zone, onSave, set_zone, onToggleSetZone }) => {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<any[]>([]);
 
@@ -64,24 +66,38 @@ const SafeZoneEditor: React.FC<SafeZoneEditorProps> = ({ safe_zone, onSave }) =>
             Chế Độ An Toàn
           </span>
         </div>
-        {!editing ? (
+        <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
+            variant={set_zone == true || set_zone === "true" ? "destructive" : "secondary"}
             size="sm"
-            onClick={handleEdit}
+            onClick={() => {
+              const current = set_zone == true || set_zone === "true";
+              onToggleSetZone && onToggleSetZone(!current);
+            }}
             className="rounded-full"
           >
-            <Edit className="w-4 h-4" />
+            {set_zone == true || set_zone === "true" ? "Tắt vùng" : "Bật vùng"}
           </Button>
-        ) : (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleSave}
-          >
-            Bật
-          </Button>
-        )}
+
+          {!editing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleEdit}
+              className="rounded-full"
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleSave}
+            >
+              Bật
+            </Button>
+          )}
+        </div>
       </div>
       
       <div className="space-y-3">
