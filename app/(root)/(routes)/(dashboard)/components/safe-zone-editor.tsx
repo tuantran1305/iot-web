@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Edit, Shield } from "lucide-react";
 import { useState } from "react";
@@ -66,19 +67,16 @@ const SafeZoneEditor: React.FC<SafeZoneEditorProps> = ({ safe_zone, onSave, set_
             Chế Độ An Toàn
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant={set_zone == true || set_zone === "true" ? "destructive" : "secondary"}
-            size="sm"
-            onClick={() => {
-              const current = set_zone == true || set_zone === "true";
-              onToggleSetZone && onToggleSetZone(!current);
-            }}
-            className="rounded-full"
-          >
-            {set_zone == true || set_zone === "true" ? "Tắt vùng" : "Bật vùng"}
-          </Button>
-
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">Bật vùng an toàn</span>
+            <Switch
+              checked={set_zone === true || set_zone === "true"}
+              onCheckedChange={(checked) => {
+                onToggleSetZone && onToggleSetZone(checked);
+              }}
+            />
+          </div>
           {!editing ? (
             <Button
               variant="ghost"

@@ -23,7 +23,7 @@ import SafeZoneEditor from "./components/safe-zone-editor";
 const { deviceId, tbServer } = config;
 const keys = "heartRate,SPO2,temperature,longitude,latitude,waterDetected,waterDuration";
 const attrKeys =
-  "temperature_threshold_upper,spo2_upper,spo2_lower,heartrate_threshold_upper,heartrate_threshold_lower,buzzer,phone,alert,safe_zone";
+  "temperature_threshold_upper,spo2_upper,spo2_lower,heartrate_threshold_upper,heartrate_threshold_lower,buzzer,phone,alert,safe_zone,set_zone";
 
 const formatAttribute = (data: any) => {
   let format = {} as any;
