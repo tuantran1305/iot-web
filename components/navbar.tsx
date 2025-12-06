@@ -41,10 +41,10 @@ const Navbar = () => {
             <MapPin className="h-6 w-6 text-blue-500" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Định Vị Và Theo Dõi Trẻ Em
+            <h1 className="text-xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+              IoT Agricultural
             </h1>
-            <p className="text-xs text-muted-foreground">Hệ thống giám sát an toàn</p>
+            <p className="text-xs text-muted-foreground">Giám sát và điều khiển nhà nông</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-6">

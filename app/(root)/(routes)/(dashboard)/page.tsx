@@ -7,7 +7,7 @@ import { config } from "@/lib/config";
 import { thingsboard } from "@/lib/tbClient";
 import { cn } from "@/lib/utils";
 import axios from "axios";
-import { BellIcon, Grab, Heart, Thermometer, User2Icon, Activity, Droplets } from "lucide-react";
+import { ThermometerSun, Droplet, SunMedium, Sprout, Wifi, Timer, Lightbulb, Fan, Flame, CloudFog, PanelRightOpen, PanelRightClose } from "lucide-react";
 import dynamic from "next/dynamic";
 import { redirect } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -18,12 +18,33 @@ import InputThreshold from "./components/input-threshold";
 import LatestTelemetryCard from "./components/latest-telemetry-card";
 import TelemetryTable from "./components/telemetry-table";
 import TelemetryChart from "./components/telemetry-chart";
+import TelemetryMultiChart from "./components/telemetry-multi-chart";
 import SafeZoneEditor from "./components/safe-zone-editor";
 
 const { deviceId, tbServer } = config;
-const keys = "heartRate,SPO2,temperature,longitude,latitude,waterDetected,waterDuration";
+// Latest telemetry keys for agricultural device
+const keys = "air_temp,air_hum,lux,soil_moist,system_on,light_on,mist_on,pump_on,fan_on,heater_on,wifi_connected,uptime";
+// Attribute keys for modes, controls, and thresholds
 const attrKeys =
-  "temperature_threshold_upper,spo2_upper,spo2_lower,heartrate_threshold_upper,heartrate_threshold_lower,buzzer,phone,alert,safe_zone,set_zone";
+  [
+    "mode", // Auto/Manual
+    "auto_type", // sensor/web
+    // Web control attributes
+    "heat",
+    "light",
+    "fan",
+    "drip",
+    "mist",
+    "curtain_open",
+    "curtain_close",
+    // Thresholds for sensor auto mode
+    "soil_high",
+    "soil_low",
+    "temp_high",
+    "temp_low",
+    "light_high",
+    "light_low",
+  ].join(",");
 
 const formatAttribute = (data: any) => {
   let format = {} as any;
@@ -40,6 +61,10 @@ const DashboardPage = () => {
   const [socketUrl, setSocketUrl] = useState("");
   const [saveState, setSaveState] = useState(false);
   const [edit, setEdit] = useState({ key: "", value: "" });
+  const [mode, setMode] = useState<"Auto"|"Manual">("Auto");
+  const [autoType, setAutoType] = useState<"sensor"|"web">("sensor");
+  // Derived system state from latest telemetry
+  const systemOn = latestData?.["system_on"]?.[0]?.["value"] === "true";
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -71,27 +96,18 @@ const DashboardPage = () => {
         if (!prev) return prev;
         return {
           ...prev,
-          heartRate: obj?.["heartRate"] 
-            ? [{ ts: obj["heartRate"][0][0], value: obj["heartRate"][0][1] }]
-            : prev.heartRate,
-          SPO2: obj?.["SPO2"]
-            ? [{ ts: obj["SPO2"][0][0], value: obj["SPO2"][0][1] }]
-            : prev.SPO2,
-          temperature: obj?.["temperature"]
-            ? [{ ts: obj["temperature"][0][0], value: obj["temperature"][0][1] }]
-            : prev.temperature,
-          waterDetected: obj?.["waterDetected"]
-            ? [{ ts: obj["waterDetected"][0][0], value: obj["waterDetected"][0][1] }]
-            : prev.waterDetected,
-          waterDuration: obj?.["waterDuration"]
-            ? [{ ts: obj["waterDuration"][0][0], value: obj["waterDuration"][0][1] }]
-            : prev.waterDuration,
-          latitude: obj?.["latitude"]
-            ? [{ ts: obj["latitude"][0][0], value: obj["latitude"][0][1] }]
-            : prev.latitude,
-          longitude: obj?.["longitude"]
-            ? [{ ts: obj["longitude"][0][0], value: obj["longitude"][0][1] }]
-            : prev.longitude,
+          air_temp: obj?.["air_temp"] ? [{ ts: obj["air_temp"][0][0], value: obj["air_temp"][0][1] }] : prev.air_temp,
+          air_hum: obj?.["air_hum"] ? [{ ts: obj["air_hum"][0][0], value: obj["air_hum"][0][1] }] : prev.air_hum,
+          lux: obj?.["lux"] ? [{ ts: obj["lux"][0][0], value: obj["lux"][0][1] }] : prev.lux,
+          soil_moist: obj?.["soil_moist"] ? [{ ts: obj["soil_moist"][0][0], value: obj["soil_moist"][0][1] }] : prev.soil_moist,
+          system_on: obj?.["system_on"] ? [{ ts: obj["system_on"][0][0], value: obj["system_on"][0][1] }] : prev.system_on,
+          light_on: obj?.["light_on"] ? [{ ts: obj["light_on"][0][0], value: obj["light_on"][0][1] }] : prev.light_on,
+          mist_on: obj?.["mist_on"] ? [{ ts: obj["mist_on"][0][0], value: obj["mist_on"][0][1] }] : prev.mist_on,
+          pump_on: obj?.["pump_on"] ? [{ ts: obj["pump_on"][0][0], value: obj["pump_on"][0][1] }] : prev.pump_on,
+          fan_on: obj?.["fan_on"] ? [{ ts: obj["fan_on"][0][0], value: obj["fan_on"][0][1] }] : prev.fan_on,
+          heater_on: obj?.["heater_on"] ? [{ ts: obj["heater_on"][0][0], value: obj["heater_on"][0][1] }] : prev.heater_on,
+          wifi_connected: obj?.["wifi_connected"] ? [{ ts: obj["wifi_connected"][0][0], value: obj["wifi_connected"][0][1] }] : prev.wifi_connected,
+          uptime: obj?.["uptime"] ? [{ ts: obj["uptime"][0][0], value: obj["uptime"][0][1] }] : prev.uptime,
         };
       });
     },
@@ -174,7 +190,9 @@ const DashboardPage = () => {
         deviceId,
         payload: {
           ...attribute,
-          [edit.key]: parseFloat(edit.value),
+          [edit.key]: edit.key.endsWith("_high") || edit.key.endsWith("_low") || edit.key.includes("temp") || edit.key.includes("light") || edit.key.includes("soil")
+            ? parseFloat(edit.value)
+            : edit.value,
         },
       })
       .then(() => {
@@ -202,6 +220,7 @@ const DashboardPage = () => {
         deviceId,
         payload: {
           ...attribute,
+          // example toggle usage placeholder kept for consistency if needed
           set_zone: value ? "true" : "false",
         },
       })
@@ -223,6 +242,7 @@ const DashboardPage = () => {
       keys={keys}
       startTs={0}
       endTs={now}
+      limit={200}
     />
   ), [now]);
 
@@ -255,278 +275,135 @@ const DashboardPage = () => {
   }, []);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 md:grid-cols-2 grid-cols-1">
-        <LatestTelemetryCard
-          title="Nhiệt độ cơ thể"
-          icon={<Thermometer className="h-8 w-8 text-red-500" />}
-          data={latestData?.["temperature"][0]}
-          loading={loading}
-          unit="°C"
-        >
-          <div>
-            {parseFloat(latestData?.["temperature"][0]["value"]) <
-            attribute?.["temperature_threshold_upper"] ? (
-              <Badge className="bg-green-600">Bình thường</Badge>
-            ) : (
-              <Badge className="bg-red-600">Quá ngưỡng</Badge>
-            )}
-          </div>
-          <div>
-            <InputThreshold
-              title="Ngưỡng trên"
-              targetKey="temperature_threshold_upper"
-              setEdit={setEdit}
-              edit={edit}
-              attribute={attribute}
-              onSave={onSave}
-            />
-          </div>
-        </LatestTelemetryCard>
-        <LatestTelemetryCard
-          title="Phát hiện nước"
-          icon={<Activity className="h-8 w-8 text-blue-500" />}
-          data={latestData?.["waterDetected"][0]}
-          loading={loading}
-          isBoolean
-          booleanArr={["Có", "Không"]}
-        />
-        <LatestTelemetryCard
-          title="SpO2"
-          icon={<Droplets className="h-8 w-8 text-blue-500" />}
-          data={latestData?.["SPO2"][0]}
-          isInteger={true}
-          loading={loading}
-          unit="%"
-        >
-          <div>
-            {attribute?.["spo2_lower"] <=
-              parseFloat(latestData?.["SPO2"][0]["value"]) &&
-            parseFloat(latestData?.["SPO2"][0]["value"]) <=
-              attribute?.["spo2_upper"] ? (
-              <Badge className="bg-green-600">Bình thường</Badge>
-            ) : (
-              <Badge className="bg-red-600">Quá ngưỡng</Badge>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <InputThreshold
-              title="Ngưỡng trên"
-              targetKey="spo2_upper"
-              setEdit={setEdit}
-              edit={edit}
-              attribute={attribute}
-              onSave={onSave}
-            />
-            <InputThreshold
-              title="Ngưỡng dưới"
-              targetKey="spo2_lower"
-              setEdit={setEdit}
-              edit={edit}
-              attribute={attribute}
-              onSave={onSave}
-            />
-          </div>
-        </LatestTelemetryCard>
-        <LatestTelemetryCard
-          title="Nhịp tim"
-          icon={<Heart className="h-8 w-8 text-pink-500" />}
-          data={latestData?.["heartRate"][0]}
-          loading={loading}
-          isInteger={true}
-          unit="BPM"
-        >
-          <div>
-            {parseFloat(latestData?.["heartRate"][0]["value"]) >
-            attribute?.["heartrate_threshold_upper"] ? (
-              <Badge className="bg-red-600">Nhanh</Badge>
-            ) : parseFloat(latestData?.["heartRate"][0]["value"]) <
-              attribute?.["heartrate_threshold_lower"] ? (
-              <Badge className="bg-yellow-500">Chậm</Badge>
-            ) : (
-              <Badge className="bg-green-600">Bình thường</Badge>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <InputThreshold
-              title="Ngưỡng trên"
-              targetKey="heartrate_threshold_upper"
-              setEdit={setEdit}
-              edit={edit}
-              attribute={attribute}
-              onSave={onSave}
-            />
-            <InputThreshold
-              title="Ngưỡng dưới"
-              targetKey="heartrate_threshold_lower"
-              setEdit={setEdit}
-              edit={edit}
-              attribute={attribute}
-              onSave={onSave}
-            />
-          </div>
-        </LatestTelemetryCard>
-        <LatestTelemetryCard
-          title="Thời gian trong nước"
-          icon={<Activity className="h-8 w-8 text-orange-500" />}
-          data={latestData?.["waterDuration"][0]}
-          loading={loading}
-          unit=" giây"
-        />
-        <LatestTelemetryCard
-          title="Chuông"
-          icon={<BellIcon className="h-8 w-8 text-yellow-500" />}
-          data={attribute?.["buzzer"]}
-          loading={loading}
-          isBoolean={true}
-          className={cn(
-            attribute?.["buzzer"]
-              ? attribute?.["buzzer"] == "true"
-                ? "bg-lime-200"
-                : "bg-gray-200"
-              : ""
-          )}
-        >
-          <Button
-            className="mt-2"
-            onClick={() =>
-              onClickDevice({
-                buzzer: attribute?.["buzzer"] == "true" ? "false" : "true",
-              })
-            }
-          >
-            {attribute?.["buzzer"] == "true" ? "Tắt" : "Bật"}
-          </Button>
-        </LatestTelemetryCard>
-        <LatestTelemetryCard
-          title="Người Thân"
-          icon={<User2Icon className="h-8 w-8 text-green-500" />}
-          loading={loading}
-          isBoolean={true}
-        >
-          <InputThreshold
-            title="Số điện thoại"
-            targetKey="phone"
-            setEdit={setEdit}
-            edit={edit}
-            attribute={attribute}
-            onSave={onSave}
-          />
-        </LatestTelemetryCard>
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle>Cảnh báo</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <span>{attribute?.["alert"] || "Không có"}</span>
-          </CardContent>
-        </Card>
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle>Biểu Đồ Nhiệt độ</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TelemetryChart
-              entityId={deviceId}
-              entityType={TbEntity.DEVICE}
-              label={"Nhiệt độ"}
-              targetkey={"temperature"}
-              startTs={0}
-              endTs={now}
-            />
-          </CardContent>
-        </Card>
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle>Biểu Đồ SPO2</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TelemetryChart
-              entityId={deviceId}
-              entityType={TbEntity.DEVICE}
-              label={"SPO2"}
-              targetkey={"SPO2"}
-              startTs={0}
-              endTs={now}
-            />
-          </CardContent>
-        </Card>
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle>Biểu Đồ Nhịp Tim</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TelemetryChart
-              entityId={deviceId}
-              entityType={TbEntity.DEVICE}
-              label={"Nhịp Tim"}
-              targetkey={"heartRate"}
-              startTs={0}
-              endTs={now}
-            />
-          </CardContent>
-        </Card>
-        <Card className="col-span-full">
-          <CardHeader>
-            <CardTitle>Biểu Đồ Thời Gian Trong Nước</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TelemetryChart
-              entityId={deviceId}
-              entityType={TbEntity.DEVICE}
-              label={"Thời Gian Trong Nước (giây)"}
-              targetkey={"waterDuration"}
-              startTs={0}
-              endTs={now}
-            />
-          </CardContent>
-        </Card>
+    <div className="flex flex-col gap-6">
+      {/* Top status cards */}
+      <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
+        <LatestTelemetryCard title="Nhiệt độ không khí" icon={<ThermometerSun className="h-8 w-8 text-red-500" />} data={latestData?.["air_temp"][0]} loading={loading} unit="°C" />
+        <LatestTelemetryCard title="Độ ẩm không khí" icon={<Droplet className="h-8 w-8 text-blue-500" />} data={latestData?.["air_hum"][0]} loading={loading} unit="%" />
+        <LatestTelemetryCard title="Ánh sáng" icon={<SunMedium className="h-8 w-8 text-yellow-500" />} data={latestData?.["lux"][0]} loading={loading} unit=" lx" />
+        <LatestTelemetryCard title="Độ ẩm đất" icon={<Sprout className="h-8 w-8 text-green-500" />} data={latestData?.["soil_moist"][0]} loading={loading} unit=" %" />
+        <LatestTelemetryCard title="WiFi" icon={<Wifi className="h-8 w-8 text-indigo-500" />} data={latestData?.["wifi_connected"][0]} loading={loading} isBoolean booleanArr={["Kết nối", "Mất kết nối"]} />
+        <LatestTelemetryCard title="Uptime" icon={<Timer className="h-8 w-8 text-gray-500" />} data={latestData?.["uptime"][0]} loading={loading} unit=" s" />
       </div>
+
+      {/* Mode selection */}
       <Card>
         <CardHeader>
-          <CardTitle>Bản Đồ</CardTitle>
+          <CardTitle>Chế độ: Auto / Manual</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Maps
-            latitude={latestData?.["latitude"]?.[0]["value"]}
-            longitude={latestData?.["longitude"]?.[0]["value"]}
-            safe_zone={attribute?.["safe_zone"]}
-          />
+        <CardContent className="flex flex-col gap-4">
+          {/* Indicators */}
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-md ${systemOn ? "bg-green-100" : "bg-red-100"}`}>
+              <span className={`h-3 w-3 rounded-full ${systemOn ? "bg-green-500" : "bg-red-500"}`} />
+              <span className="text-sm font-medium">Hệ thống: {systemOn ? "ON" : "OFF"}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-100">
+              <span className="h-3 w-3 rounded-full bg-slate-500" />
+              <span className="text-sm font-medium">Chế độ: {mode}</span>
+            </div>
+          </div>
+
+          {/* Display-only mode state: no direct controls */}
+          {mode === "Auto" && (
+            <div className="flex items-center gap-2">
+              <Badge>Auto</Badge>
+            </div>
+          )}
+          {mode === "Manual" && (
+            <div className="flex items-center gap-2">
+              <Badge>Manual</Badge>
+            </div>
+          )}
+
+          {/* In Manual, show Auto configuration (unlocked). In Auto, show as usual */}
+          {(mode === "Auto" || mode === "Manual") && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={autoType === "sensor" ? "default" : "secondary"}
+                  onClick={() => {
+                    setAutoType("sensor");
+                    onClickDevice({ auto: "sensor" });
+                  }}
+                >
+                  Auto Sensor
+                </Button>
+                <Button
+                  variant={autoType === "web" ? "default" : "secondary"}
+                  onClick={() => {
+                    setAutoType("web");
+                    onClickDevice({ auto: "control" });
+                  }}
+                >
+                  Auto Control
+                </Button>
+              </div>
+
+              {autoType === "sensor" && (
+                <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
+                  <LatestTelemetryCard title="Ngưỡng nhiệt độ" icon={<ThermometerSun className="h-8 w-8 text-red-500" />} loading={false}>
+                    <div className="flex flex-col gap-2">
+                      <InputThreshold title="Temp high" targetKey="temp_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                      <InputThreshold title="Temp low" targetKey="temp_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                    </div>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Ngưỡng độ ẩm đất" icon={<Sprout className="h-8 w-8 text-green-500" />} loading={false}>
+                    <div className="flex flex-col gap-2">
+                      <InputThreshold title="Soil high" targetKey="soil_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                      <InputThreshold title="Soil low" targetKey="soil_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                    </div>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Ngưỡng ánh sáng" icon={<SunMedium className="h-8 w-8 text-yellow-500" />} loading={false}>
+                    <div className="flex flex-col gap-2">
+                      <InputThreshold title="Light high" targetKey="light_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                      <InputThreshold title="Light low" targetKey="light_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                    </div>
+                  </LatestTelemetryCard>
+                </div>
+              )}
+
+              {autoType === "web" && (
+                <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
+                  <LatestTelemetryCard title="Bóng đèn sưởi" icon={<Flame className="h-8 w-8 text-red-500" />} loading={false} data={{ value: attribute?.["heat"] }} isBoolean booleanArr={["Bật","Tắt"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ heat: attribute?.["heat"] === "true" ? "false" : "true" })}>{attribute?.["heat"] === "true" ? "Tắt" : "Bật"}</Button>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Đèn chiếu sáng" icon={<Lightbulb className="h-8 w-8 text-yellow-500" />} loading={false} data={{ value: attribute?.["light"] }} isBoolean booleanArr={["Bật","Tắt"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ light: attribute?.["light"] === "true" ? "false" : "true" })}>{attribute?.["light"] === "true" ? "Tắt" : "Bật"}</Button>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Quạt" icon={<Fan className="h-8 w-8 text-blue-500" />} loading={false} data={{ value: attribute?.["fan"] }} isBoolean booleanArr={["Bật","Tắt"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ fan: attribute?.["fan"] === "true" ? "false" : "true" })}>{attribute?.["fan"] === "true" ? "Tắt" : "Bật"}</Button>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Tưới nhỏ giọt" icon={<Droplet className="h-8 w-8 text-emerald-500" />} loading={false} data={{ value: attribute?.["drip"] }} isBoolean booleanArr={["Bật","Tắt"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ drip: attribute?.["drip"] === "true" ? "false" : "true" })}>{attribute?.["drip"] === "true" ? "Tắt" : "Bật"}</Button>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Phun sương" icon={<CloudFog className="h-8 w-8 text-cyan-500" />} loading={false} data={{ value: attribute?.["mist"] }} isBoolean booleanArr={["Bật","Tắt"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ mist: attribute?.["mist"] === "true" ? "false" : "true" })}>{attribute?.["mist"] === "true" ? "Tắt" : "Bật"}</Button>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Rèm mở" icon={<PanelRightOpen className="h-8 w-8 text-gray-500" />} loading={false} data={{ value: attribute?.["curtain_open"] }} isBoolean booleanArr={["Mở","Đóng"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: "true", curtain_close: "false" })}>Mở</Button>
+                  </LatestTelemetryCard>
+                  <LatestTelemetryCard title="Rèm đóng" icon={<PanelRightClose className="h-8 w-8 text-gray-700" />} loading={false} data={{ value: attribute?.["curtain_close"] }} isBoolean booleanArr={["Đóng","Mở"]}>
+                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: "false", curtain_close: "true" })}>Đóng</Button>
+                  </LatestTelemetryCard>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
-      <SafeZoneEditor
-        safe_zone={attribute?.["safe_zone"]}
-        set_zone={attribute?.["set_zone"]}
-        onToggleSetZone={onToggleSetZone}
-        onSave={async (newSafeZone) => {
-          const token = localStorage.getItem("token");
-          if (!token) {
-            redirect("/login");
-          }
-          await axios
-            .post(`/api/telemetry/attribute/save`, {
-              token,
-              deviceId,
-              payload: {
-                safe_zone: JSON.stringify(newSafeZone),
-              },
-            })
-            .then(() => {
-              toast.success("Lưu vị trí an toàn thành công");
-              setSaveState(!saveState);
-            })
-            .catch((error) => {
-              console.error({ error });
-              toast.error("Có lỗi xảy ra");
-            });
-        }}
+
+      {/* Combined chart for 4 metrics */}
+      <TelemetryMultiChart
+        token={typeof window !== "undefined" ? (localStorage.getItem("token") || "") : ""}
+        entityId={deviceId}
+        startTs={0}
+        endTs={now}
+        refreshMs={60000}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>Bảng Dữ Liệu</CardTitle>
-        </CardHeader>
-        <CardContent>{table}</CardContent>
-      </Card>
+
+      {/* Bảng dữ liệu cảm biến (200 dòng tối đa) */}
+      {table}
     </div>
   );
 };

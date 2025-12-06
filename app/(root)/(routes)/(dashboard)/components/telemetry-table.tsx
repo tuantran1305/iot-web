@@ -75,67 +75,24 @@ const TelemetryTable = ({
       ),
     },
     {
-      accessorKey: "SPO2",
-      header: "SpO2 (%)",
+      accessorKey: "air_temp",
+      header: "Nhiệt độ không khí (°C)",
     },
     {
-      accessorKey: "heartRate",
-      header: "Nhịp tim (BPM)",
+      accessorKey: "air_hum",
+      header: "Độ ẩm không khí (%)",
     },
     {
-      accessorKey: "temperature",
-      header: "Nhiệt độ cơ thể (°C)",
+      accessorKey: "lux",
+      header: "Ánh sáng (lx)",
     },
     {
-      accessorKey: "waterDetected",
-      header: "Phát hiện nước",
-      cell: ({ row }) => {
-        const value = row.getValue("waterDetected");
-        if (value === "true" || value === true) {
-          return <span className="text-blue-600 font-medium">Có</span>;
-        } else if (value === "false" || value === false) {
-          return <span className="text-gray-600">Không</span>;
-        }
-        return <span className="text-gray-400">-</span>;
-      },
-    },
-    {
-      accessorKey: "waterDuration",
-      header: "Thời gian trong nước (giây)",
+      accessorKey: "soil_moist",
+      header: "Độ ẩm đất (%)",
     },
     {
       accessorKey: "ts",
       header: "Thời gian cập nhật",
-    },
-    {
-      accessorKey: "latitude",
-      header: "Vĩ Độ",
-    },
-    {
-      accessorKey: "longitude",
-      header: "Kinh Độ",
-    },
-    {
-      accessorKey: "",
-      header: "Mapped pin",
-      cell: ({ row }) => {
-        if (row.getValue("latitude") && row.getValue("longitude")) {
-          const url = `https://maps.google.com/?q=${row.getValue(
-            "latitude"
-          )},${row.getValue("longitude")}`;
-          return (
-            <Button variant={"link"} className="px-0">
-              <Link
-                href={url}
-                target="_blank"
-                className="font-medium text-blue-500"
-              >
-                {url}
-              </Link>
-            </Button>
-          );
-        }
-      },
     },
   ];
 
