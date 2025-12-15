@@ -26,7 +26,7 @@ const TelemetryMultiChart: React.FC<Props> = ({ token, entityId, startTs, endTs,
     const run = async () => {
       try {
         setLoading(true);
-        const resp = await thingsboard.telemetry().getTimeseries(
+        const resp: any = await thingsboard.telemetry().getTimeseries(
           token,
           { entityId, entityType: TbEntity.DEVICE },
           {
@@ -41,10 +41,10 @@ const TelemetryMultiChart: React.FC<Props> = ({ token, entityId, startTs, endTs,
         if (!mounted) return;
         const toSeries = (arr?: any[]) => (arr || []).map((it: any) => ({ ts: it.ts, value: parseFloat(it.value) }));
         setData({
-          air_temp: toSeries(resp?.air_temp),
-          air_hum: toSeries(resp?.air_hum),
-          lux: toSeries(resp?.lux),
-          soil_moist: toSeries(resp?.soil_moist),
+          air_temp: toSeries(resp?.data?.air_temp ?? resp?.air_temp),
+          air_hum: toSeries(resp?.data?.air_hum ?? resp?.air_hum),
+          lux: toSeries(resp?.data?.lux ?? resp?.lux),
+          soil_moist: toSeries(resp?.data?.soil_moist ?? resp?.soil_moist),
         });
       } finally {
         if (mounted) setLoading(false);
@@ -67,10 +67,10 @@ const TelemetryMultiChart: React.FC<Props> = ({ token, entityId, startTs, endTs,
   const minVal = Math.min(...allPoints.map(p => p.value).concat([0]));
   const maxVal = Math.max(...allPoints.map(p => p.value).concat([100]));
 
-  const xScale = (ts: number) => padding.left + (ts - minTs) / (maxTs - minTs) * (width - padding.left - padding.right);
-  const yScale = (v: number) => height - padding.bottom - (v - minVal) / (maxVal - minVal) * (height - padding.top - padding.bottom);
+  const xScale = React.useCallback((ts: number) => padding.left + (ts - minTs) / (maxTs - minTs) * (width - padding.left - padding.right), [padding.left, padding.right, minTs, maxTs, width]);
+  const yScale = React.useCallback((v: number) => height - padding.bottom - (v - minVal) / (maxVal - minVal) * (height - padding.top - padding.bottom), [height, padding.bottom, padding.top, minVal, maxVal]);
 
-  const colors: Record<string, string> = { air_temp: "#ef4444", air_hum: "#3b82f6", lux: "#f59e0b", soil_moist: "#10b981" };
+  const colors = React.useMemo<Record<string, string>>(() => ({ air_temp: "#ef4444", air_hum: "#3b82f6", lux: "#f59e0b", soil_moist: "#10b981" }), []);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
@@ -114,7 +114,7 @@ const TelemetryMultiChart: React.FC<Props> = ({ token, entityId, startTs, endTs,
       ctx.lineTo(hover.x, height - padding.bottom);
       ctx.stroke();
     }
-  }, [data, hover]);
+  }, [data, hover, colors, padding.top, padding.bottom, width, height, xScale, yScale]);
 
   return (
     <Card>
