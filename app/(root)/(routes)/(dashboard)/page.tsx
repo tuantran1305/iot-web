@@ -47,9 +47,39 @@ const attrKeys =
   ].join(",");
 
 const formatAttribute = (data: any) => {
-  let format = {} as any;
-  Object.values(data).map((item: any) => {
-    format[item["key"]] = item["value"];
+  const booleanKeys = new Set([
+    "heat",
+    "light",
+    "fan",
+    "drip",
+    "mist",
+    "curtain_open",
+    "curtain_close",
+    // include other boolean flags if they exist later
+  ]);
+  const numberKeys = new Set([
+    "soil_high",
+    "soil_low",
+    "temp_high",
+    "temp_low",
+    "light_high",
+    "light_low",
+  ]);
+
+  const format: Record<string, any> = {};
+  Object.values(data).forEach((item: any) => {
+    const key = item["key"];
+    const val = item["value"];
+
+    if (booleanKeys.has(key)) {
+      // Normalize to true booleans
+      format[key] = val === true || val === "true" || val === 1 || val === "1";
+    } else if (numberKeys.has(key)) {
+      const n = typeof val === "number" ? val : parseFloat(val);
+      format[key] = Number.isFinite(n) ? n : val;
+    } else {
+      format[key] = val;
+    }
   });
   return format;
 };
@@ -220,8 +250,7 @@ const DashboardPage = () => {
         deviceId,
         payload: {
           ...attribute,
-          // example toggle usage placeholder kept for consistency if needed
-          set_zone: value ? "true" : "false",
+          set_zone: value,
         },
       })
       .then(() => {
@@ -366,25 +395,25 @@ const DashboardPage = () => {
               {autoType === "web" && (
                 <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
                   <LatestTelemetryCard title="Bóng đèn sưởi" icon={<Flame className="h-8 w-8 text-red-500" />} loading={false} data={{ value: attribute?.["heat"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ heat: attribute?.["heat"] === "true" ? "false" : "true" })}>{attribute?.["heat"] === "true" ? "Tắt" : "Bật"}</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ heat: !attribute?.["heat"] })}>{attribute?.["heat"] ? "Tắt" : "Bật"}</Button>
                   </LatestTelemetryCard>
                   <LatestTelemetryCard title="Đèn chiếu sáng" icon={<Lightbulb className="h-8 w-8 text-yellow-500" />} loading={false} data={{ value: attribute?.["light"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ light: attribute?.["light"] === "true" ? "false" : "true" })}>{attribute?.["light"] === "true" ? "Tắt" : "Bật"}</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ light: !attribute?.["light"] })}>{attribute?.["light"] ? "Tắt" : "Bật"}</Button>
                   </LatestTelemetryCard>
                   <LatestTelemetryCard title="Quạt" icon={<Fan className="h-8 w-8 text-blue-500" />} loading={false} data={{ value: attribute?.["fan"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ fan: attribute?.["fan"] === "true" ? "false" : "true" })}>{attribute?.["fan"] === "true" ? "Tắt" : "Bật"}</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ fan: !attribute?.["fan"] })}>{attribute?.["fan"] ? "Tắt" : "Bật"}</Button>
                   </LatestTelemetryCard>
                   <LatestTelemetryCard title="Tưới nhỏ giọt" icon={<Droplet className="h-8 w-8 text-emerald-500" />} loading={false} data={{ value: attribute?.["drip"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ drip: attribute?.["drip"] === "true" ? "false" : "true" })}>{attribute?.["drip"] === "true" ? "Tắt" : "Bật"}</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ drip: !attribute?.["drip"] })}>{attribute?.["drip"] ? "Tắt" : "Bật"}</Button>
                   </LatestTelemetryCard>
                   <LatestTelemetryCard title="Phun sương" icon={<CloudFog className="h-8 w-8 text-cyan-500" />} loading={false} data={{ value: attribute?.["mist"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ mist: attribute?.["mist"] === "true" ? "false" : "true" })}>{attribute?.["mist"] === "true" ? "Tắt" : "Bật"}</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ mist: !attribute?.["mist"] })}>{attribute?.["mist"] ? "Tắt" : "Bật"}</Button>
                   </LatestTelemetryCard>
                   <LatestTelemetryCard title="Rèm mở" icon={<PanelRightOpen className="h-8 w-8 text-gray-500" />} loading={false} data={{ value: attribute?.["curtain_open"] }} isBoolean booleanArr={["Mở","Đóng"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: "true", curtain_close: "false" })}>Mở</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: true, curtain_close: false })}>Mở</Button>
                   </LatestTelemetryCard>
                   <LatestTelemetryCard title="Rèm đóng" icon={<PanelRightClose className="h-8 w-8 text-gray-700" />} loading={false} data={{ value: attribute?.["curtain_close"] }} isBoolean booleanArr={["Đóng","Mở"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: "false", curtain_close: "true" })}>Đóng</Button>
+                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: false, curtain_close: true })}>Đóng</Button>
                   </LatestTelemetryCard>
                 </div>
               )}
