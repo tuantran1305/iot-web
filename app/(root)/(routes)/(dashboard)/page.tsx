@@ -271,7 +271,6 @@ const DashboardPage = () => {
       keys={keys}
       startTs={0}
       endTs={now}
-      limit={200}
     />
   ), [now]);
 
