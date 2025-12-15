@@ -49,7 +49,7 @@ const LatestTelemetryCard: React.FC<LatestTelemetryCardProps> = ({
           )}
           {isBoolean && data && (
             <p className="text-base ">
-              {data?.["value"] == "true" ? booleanArr?.[0] : booleanArr?.[1]}
+              {(data?.["value"] === true || data?.["value"] === "true") ? booleanArr?.[0] : booleanArr?.[1]}
             </p>
           )}
         </div>

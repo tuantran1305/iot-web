@@ -3,7 +3,7 @@ const config = {
   // tbServer: "212.38.94.144:8081",
   tbServer: "thingsboard.cloud",
   // tbServer: "thingsboard.srv524038.hstgr.cloud",
-  deviceId: "45d77f50-cb23-11f0-b238-bd8a9470eef2",
+  deviceId: "743b0d20-a527-11f0-b150-2710a8915e1d",
 };
 
 export { config };

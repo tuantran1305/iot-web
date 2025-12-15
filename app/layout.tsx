@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "IoT Dashboard Monitor",
-  description: "IoT Dashboard Monitor using Thingsboard",
+  title: "IoT Agricultural",
+  description: "IoT Agricultural control & monitoring via ThingsBoard",
 };
 
 export default function RootLayout({
