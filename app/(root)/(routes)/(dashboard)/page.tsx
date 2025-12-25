@@ -1,53 +1,63 @@
 "use client";
 
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import useWebSocket from "react-use-websocket";
+import { toast } from "react-hot-toast";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { config } from "@/lib/config";
-import { thingsboard } from "@/lib/tbClient";
-import { cn } from "@/lib/utils";
-import axios from "axios";
-import { ThermometerSun, Droplet, SunMedium, Sprout, Wifi, Timer, Lightbulb, Fan, Flame, CloudFog, PanelRightOpen, PanelRightClose } from "lucide-react";
-import dynamic from "next/dynamic";
-import { redirect } from "next/navigation";
-import { useEffect, useState, useMemo, useCallback } from "react";
-import toast from "react-hot-toast";
-import useWebSocket from "react-use-websocket";
-import { TbEntity } from "thingsboard-api-client";
-import InputThreshold from "./components/input-threshold";
+import { Power, PanelRightOpen, PanelRightClose, ThermometerSun, Droplet, SunMedium, Sprout, Wifi, Timer, Lightbulb, Fan, Flame, CloudFog } from "lucide-react";
+
 import LatestTelemetryCard from "./components/latest-telemetry-card";
+import InputThreshold from "./components/input-threshold";
 import TelemetryTable from "./components/telemetry-table";
-import TelemetryChart from "./components/telemetry-chart";
 import TelemetryMultiChart from "./components/telemetry-multi-chart";
-import SafeZoneEditor from "./components/safe-zone-editor";
+import { config } from "@/lib/config";
+import { TbEntity } from "thingsboard-api-client";
 
-const { deviceId, tbServer } = config;
-// Latest telemetry keys for agricultural device
-const keys = "air_temp,air_hum,lux,soil_moist,system_on,light_on,mist_on,pump_on,fan_on,heater_on,wifi_connected,uptime";
-// Attribute keys for modes, controls, and thresholds
-const attrKeys =
-  [
-    "mode", // Auto/Manual
-    "auto_type", // sensor/web
-    // Web control attributes
-    "heat",
-    "light",
-    "fan",
-    "drip",
-    "mist",
-    "curtain_open",
-    "curtain_close",
-    // Thresholds for sensor auto mode
-    "soil_high",
-    "soil_low",
-    "temp_high",
-    "temp_low",
-    "light_high",
-    "light_low",
-  ].join(",");
+const { tbServer, deviceId } = config;
 
-const formatAttribute = (data: any) => {
+const keys = [
+  "air_temp",
+  "air_hum",
+  "lux",
+  "soil_moist",
+  "system_on",
+  "light_on",
+  "mist_on",
+  "pump_on",
+  "fan_on",
+  "heater_on",
+  "wifi_connected",
+  "uptime",
+  "auto_mode",
+].join(",");
+
+const attrKeys = [
+  "power",
+  "auto_mode_control",
+  "heat",
+  "light",
+  "fan",
+  "drip",
+  "mist",
+  "curtain_open",
+  "curtain_close",
+  "soil_high",
+  "soil_low",
+  "temp_high",
+  "temp_low",
+  "hum_high",
+  "hum_low",
+  "light_high",
+  "light_low",
+].join(",");
+
+function formatAttribute(data: any) {
   const booleanKeys = new Set([
+    "power",
     "heat",
     "light",
     "fan",
@@ -55,24 +65,22 @@ const formatAttribute = (data: any) => {
     "mist",
     "curtain_open",
     "curtain_close",
-    // include other boolean flags if they exist later
   ]);
   const numberKeys = new Set([
     "soil_high",
     "soil_low",
     "temp_high",
     "temp_low",
+    "hum_high",
+    "hum_low",
     "light_high",
     "light_low",
   ]);
-
   const format: Record<string, any> = {};
-  Object.values(data).forEach((item: any) => {
-    const key = item["key"];
-    const val = item["value"];
-
+  Object.values(data || {}).forEach((item: any) => {
+    const key = item?.key;
+    const val = item?.value;
     if (booleanKeys.has(key)) {
-      // Normalize to true booleans
       format[key] = val === true || val === "true" || val === 1 || val === "1";
     } else if (numberKeys.has(key)) {
       const n = typeof val === "number" ? val : parseFloat(val);
@@ -82,358 +90,271 @@ const formatAttribute = (data: any) => {
     }
   });
   return format;
-};
+}
 
 const DashboardPage = () => {
   const [loading, setLoading] = useState(false);
-  const [latestData, setLatestData] = useState() as any;
-  const [attribute, setAttribute] = useState() as any;
+  const [latestData, setLatestData] = useState<any>();
+  const [attribute, setAttribute] = useState<any>();
   const [socketUrl, setSocketUrl] = useState("");
-  const [saveState, setSaveState] = useState(false);
-  const [edit, setEdit] = useState({ key: "", value: "" });
-  const [mode, setMode] = useState<"Auto"|"Manual">("Auto");
-  const [autoType, setAutoType] = useState<"sensor"|"web">("sensor");
-  // Derived system state from latest telemetry
-  const systemOn = latestData?.["system_on"]?.[0]?.["value"] === "true";
+  const [edit, setEdit] = useState<{ key: string; value: any }>({ key: "", value: "" });
+
+  const now = useMemo(() => Date.now(), []);
+
+  const powerOn = attribute?.power === true || attribute?.power === "true" || attribute?.power === 1 || attribute?.power === "1";
+  const autoModeVal = latestData?.auto_mode?.[0]?.value;
+  const isAutoMode = autoModeVal === true || autoModeVal === "true" || autoModeVal === 1 || autoModeVal === "1";
+  const isAutoControl = attribute?.auto_mode_control === true || attribute?.auto_mode_control === "true" || attribute?.auto_mode_control === 1 || attribute?.auto_mode_control === "1";
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    // Prefer secure WS if the page is served over HTTPS and server supports it
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : "";
     const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
-    const socketUrl = `${protocol}://${tbServer}/api/ws/plugins/telemetry?token=${token}`;
-    setSocketUrl(socketUrl);
+    setSocketUrl(`${protocol}://${tbServer}/api/ws/plugins/telemetry?token=${token}`);
   }, []);
-  const { getWebSocket } = useWebSocket(socketUrl != "" ? socketUrl : null, {
+
+  const { sendMessage } = useWebSocket(socketUrl || null, {
     onOpen: () => {
-      var object = {
-        tsSubCmds: [
-          {
-            entityType: "DEVICE",
-            entityId: deviceId,
-            scope: "LATEST_TELEMETRY",
-            cmdId: 10,
-          },
-        ],
+      const cmd = {
+        tsSubCmds: [{ entityType: "DEVICE", entityId: deviceId, scope: "LATEST_TELEMETRY", cmdId: 10 }],
         historyCmds: [],
         attrSubCmds: [],
       };
-      var data = JSON.stringify(object);
-      getWebSocket().send(data);
+      sendMessage(JSON.stringify(cmd));
     },
     onMessage: (event) => {
-      let obj = JSON.parse(event.data).data;
+      const obj = JSON.parse(event.data)?.data;
       setLatestData((prev: any) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          air_temp: obj?.["air_temp"] ? [{ ts: obj["air_temp"][0][0], value: obj["air_temp"][0][1] }] : prev.air_temp,
-          air_hum: obj?.["air_hum"] ? [{ ts: obj["air_hum"][0][0], value: obj["air_hum"][0][1] }] : prev.air_hum,
-          lux: obj?.["lux"] ? [{ ts: obj["lux"][0][0], value: obj["lux"][0][1] }] : prev.lux,
-          soil_moist: obj?.["soil_moist"] ? [{ ts: obj["soil_moist"][0][0], value: obj["soil_moist"][0][1] }] : prev.soil_moist,
-          system_on: obj?.["system_on"] ? [{ ts: obj["system_on"][0][0], value: obj["system_on"][0][1] }] : prev.system_on,
-          light_on: obj?.["light_on"] ? [{ ts: obj["light_on"][0][0], value: obj["light_on"][0][1] }] : prev.light_on,
-          mist_on: obj?.["mist_on"] ? [{ ts: obj["mist_on"][0][0], value: obj["mist_on"][0][1] }] : prev.mist_on,
-          pump_on: obj?.["pump_on"] ? [{ ts: obj["pump_on"][0][0], value: obj["pump_on"][0][1] }] : prev.pump_on,
-          fan_on: obj?.["fan_on"] ? [{ ts: obj["fan_on"][0][0], value: obj["fan_on"][0][1] }] : prev.fan_on,
-          heater_on: obj?.["heater_on"] ? [{ ts: obj["heater_on"][0][0], value: obj["heater_on"][0][1] }] : prev.heater_on,
-          wifi_connected: obj?.["wifi_connected"] ? [{ ts: obj["wifi_connected"][0][0], value: obj["wifi_connected"][0][1] }] : prev.wifi_connected,
-          uptime: obj?.["uptime"] ? [{ ts: obj["uptime"][0][0], value: obj["uptime"][0][1] }] : prev.uptime,
-        };
+        if (!obj) return prev;
+        const merged = { ...(prev || {}) };
+        Object.entries(obj).forEach(([k, v]) => {
+          merged[k] = v as any;
+        });
+        return merged;
       });
     },
-    onError: () => {
-      // Fallback: when WS fails (e.g., HTTPS-only context + ws server), disable WS by clearing URL
-      setSocketUrl("");
-    },
-    onClose: () => {},
-  }) as any;
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      redirect("/login");
-    }
-
-    const getData = async () => {
-      setLoading(true);
-      await axios
-        .post(`/api/telemetry/latest`, {
-          token,
-          deviceId,
-          keys,
-        })
-        .then((resp) => {
-          setLatestData(resp.data);
-        })
-        .catch((error) => {
-          console.error({ error });
-          toast.error("Có lỗi xảy ra");
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    };
-
-    getData();
-  }, []);
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      redirect("/login");
-    }
-
-    const getData = async () => {
-      setLoading(true);
-      await axios
-        .post(`/api/telemetry/attribute`, {
-          token,
-          deviceId,
-          keys: attrKeys,
-        })
-        .then((resp) => {
-          setAttribute(formatAttribute(resp.data));
-        })
-        .catch((error) => {
-          console.error({ error });
-          toast.error("Có lỗi xảy ra");
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    };
-
-    getData();
-  }, [saveState]);
-
-  const now = Date.now();
-
-  const onSave = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      redirect("/login");
-    }
-
-    await axios
-      .post(`/api/telemetry/attribute/save`, {
-        token,
-        deviceId,
-        payload: {
-          ...attribute,
-          [edit.key]: edit.key.endsWith("_high") || edit.key.endsWith("_low") || edit.key.includes("temp") || edit.key.includes("light") || edit.key.includes("soil")
-            ? parseFloat(edit.value)
-            : edit.value,
-        },
-      })
-      .then(() => {
-        toast.success("Lưu ngưỡng thành công");
-        setSaveState((prev) => !prev);
-      })
-      .catch((error) => {
-        console.error({ error });
-        toast.error("Có gì đó sai sai");
-      })
-      .finally(() => {
-        setEdit({ key: "", value: "" });
-      });
-  }, [attribute, edit]);
-
-  const onToggleSetZone = useCallback(async (value: boolean) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      redirect("/login");
-    }
-
-    await axios
-      .post(`/api/telemetry/attribute/save`, {
-        token,
-        deviceId,
-        payload: {
-          ...attribute,
-          set_zone: value,
-        },
-      })
-      .then(() => {
-        toast.success("Cập nhật chế độ vùng an toàn");
-        setSaveState((prev) => !prev);
-      })
-      .catch((error) => {
-        console.error({ error });
-        toast.error("Không thể thay đổi chế độ vùng");
-      });
-  }, [attribute]);
-
-  // Memoize table to avoid re-render on every ping
-  const table = useMemo(() => (
-    <TelemetryTable
-      entityId={deviceId}
-      entityType={TbEntity.DEVICE}
-      keys={keys}
-      startTs={0}
-      endTs={now}
-    />
-  ), [now]);
-
-  const Maps = dynamic(() => import("./components/maps"), {
-    ssr: false,
+    shouldReconnect: () => true,
   });
 
-  const onClickDevice = useCallback(async (data: any) => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      redirect("/login");
-    }
-    await axios
-      .post(`/api/telemetry/attribute/save`, {
-        token,
-        deviceId,
-        payload: {
-          ...data,
-        },
-      })
-      .then(() => {
-        toast.success("Lưu thành công");
-        setSaveState((prev) => !prev);
-      })
-      .catch((error) => {
-        console.error({ error });
-        toast.error("Có lỗi xảy ra");
-      })
-      .finally(() => {});
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+    const fetchAll = async () => {
+      try {
+        setLoading(true);
+        const [latestResp, attrResp] = await Promise.all([
+          axios.post("/api/telemetry/latest", { token, deviceId, keys }),
+          axios.post("/api/telemetry/attribute", { token, deviceId, keys: attrKeys }),
+        ]);
+        setLatestData(latestResp.data);
+        setAttribute(formatAttribute(attrResp.data));
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || "Lỗi kết nối dữ liệu");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
   }, []);
 
-  return (
-    <div className="flex flex-col gap-6">
-      {/* Top status cards */}
-      <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
-        <LatestTelemetryCard title="Nhiệt độ không khí" icon={<ThermometerSun className="h-8 w-8 text-red-500" />} data={latestData?.["air_temp"][0]} loading={loading} unit="°C" />
-        <LatestTelemetryCard title="Độ ẩm không khí" icon={<Droplet className="h-8 w-8 text-blue-500" />} data={latestData?.["air_hum"][0]} loading={loading} unit="%" />
-        <LatestTelemetryCard title="Ánh sáng" icon={<SunMedium className="h-8 w-8 text-yellow-500" />} data={latestData?.["lux"][0]} loading={loading} unit=" lx" />
-        <LatestTelemetryCard title="Độ ẩm đất" icon={<Sprout className="h-8 w-8 text-green-500" />} data={latestData?.["soil_moist"][0]} loading={loading} unit=" %" />
-        <LatestTelemetryCard title="WiFi" icon={<Wifi className="h-8 w-8 text-indigo-500" />} data={latestData?.["wifi_connected"][0]} loading={loading} isBoolean booleanArr={["Kết nối", "Mất kết nối"]} />
-        <LatestTelemetryCard title="Uptime" icon={<Timer className="h-8 w-8 text-gray-500" />} data={latestData?.["uptime"][0]} loading={loading} unit=" s" />
-      </div>
+  const onTogglePower = async (next: boolean) => {
+    try {
+      setLoading(true);
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      await axios.post("/api/telemetry/attribute/save", { token, deviceId, payload: { power: next } });
+      setAttribute((prev: any) => ({ ...(prev || {}), power: next }));
+      toast.success(next ? "POWER: ON" : "POWER: OFF");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không lưu được trạng thái POWER");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      {/* Mode selection */}
+  const setAutoControl = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      await axios.post("/api/telemetry/attribute/save", { token, deviceId, payload: { auto_mode_control: true } });
+      setAttribute((prev: any) => ({ ...(prev || {}), auto_mode_control: true }));
+      toast.success("Chuyển chế độ: Auto Control");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không chuyển được chế độ");
+    }
+  };
+
+  const setAutoSensor = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      await axios.post("/api/telemetry/attribute/save", { token, deviceId, payload: { auto_mode_control: false } });
+      setAttribute((prev: any) => ({ ...(prev || {}), auto_mode_control: false }));
+      toast.success("Chuyển chế độ: Auto Sensor");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không chuyển được chế độ");
+    }
+  };
+
+  const onClickDevice = async (data: Record<string, boolean>) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      await axios.post("/api/telemetry/attribute/save", { token, deviceId, payload: { ...data } });
+      setAttribute((prev: any) => ({ ...(prev || {}), ...data }));
+      toast.success("Đã điều khiển thiết bị");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không điều khiển được thiết bị");
+    }
+  };
+
+  const onSave = async () => {
+    try {
+      if (!edit.key) return;
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      const num = typeof edit.value === "number" ? edit.value : parseFloat(edit.value);
+      const val = Number.isFinite(num) ? num : edit.value;
+      await axios.post("/api/telemetry/attribute/save", { token, deviceId, payload: { [edit.key]: val } });
+      setAttribute((prev: any) => ({ ...(prev || {}), [edit.key]: val }));
+      setEdit({ key: "", value: "" });
+      toast.success("Lưu ngưỡng thành công");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Không lưu được ngưỡng");
+    }
+  };
+
+  const table = useMemo(() => {
+    return (
+      <TelemetryTable
+        entityId={deviceId}
+        entityType={TbEntity.DEVICE}
+        keys={"air_temp,air_hum,lux,soil_moist"}
+        startTs={now - 24 * 60 * 60 * 1000}
+        endTs={now}
+      />
+    );
+  }, [now]);
+
+  return (
+    <div className="space-y-6">
+      {/* POWER card */}
       <Card>
         <CardHeader>
-          <CardTitle>Chế độ: Auto / Manual</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Power className="h-5 w-5" /> POWER
+          </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {/* Indicators */}
-          <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-md ${systemOn ? "bg-green-100" : "bg-red-100"}`}>
-              <span className={`h-3 w-3 rounded-full ${systemOn ? "bg-green-500" : "bg-red-500"}`} />
-              <span className="text-sm font-medium">Hệ thống: {systemOn ? "ON" : "OFF"}</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-100">
-              <span className="h-3 w-3 rounded-full bg-slate-500" />
-              <span className="text-sm font-medium">Chế độ: {mode}</span>
-            </div>
-          </div>
-
-          {/* Display-only mode state: no direct controls */}
-          {mode === "Auto" && (
-            <div className="flex items-center gap-2">
-              <Badge>Auto</Badge>
-            </div>
-          )}
-          {mode === "Manual" && (
-            <div className="flex items-center gap-2">
-              <Badge>Manual</Badge>
-            </div>
-          )}
-
-          {/* In Manual, show Auto configuration (unlocked). In Auto, show as usual */}
-          {(mode === "Auto" || mode === "Manual") && (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={autoType === "sensor" ? "default" : "secondary"}
-                  onClick={() => {
-                    setAutoType("sensor");
-                    onClickDevice({ auto: "sensor" });
-                  }}
-                >
-                  Auto Sensor
-                </Button>
-                <Button
-                  variant={autoType === "web" ? "default" : "secondary"}
-                  onClick={() => {
-                    setAutoType("web");
-                    onClickDevice({ auto: "control" });
-                  }}
-                >
-                  Auto Control
-                </Button>
-              </div>
-
-              {autoType === "sensor" && (
-                <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
-                  <LatestTelemetryCard title="Ngưỡng nhiệt độ" icon={<ThermometerSun className="h-8 w-8 text-red-500" />} loading={false}>
-                    <div className="flex flex-col gap-2">
-                      <InputThreshold title="Temp high" targetKey="temp_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
-                      <InputThreshold title="Temp low" targetKey="temp_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
-                    </div>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Ngưỡng độ ẩm đất" icon={<Sprout className="h-8 w-8 text-green-500" />} loading={false}>
-                    <div className="flex flex-col gap-2">
-                      <InputThreshold title="Soil high" targetKey="soil_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
-                      <InputThreshold title="Soil low" targetKey="soil_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
-                    </div>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Ngưỡng ánh sáng" icon={<SunMedium className="h-8 w-8 text-yellow-500" />} loading={false}>
-                    <div className="flex flex-col gap-2">
-                      <InputThreshold title="Light high" targetKey="light_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
-                      <InputThreshold title="Light low" targetKey="light_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
-                    </div>
-                  </LatestTelemetryCard>
-                </div>
-              )}
-
-              {autoType === "web" && (
-                <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
-                  <LatestTelemetryCard title="Bóng đèn sưởi" icon={<Flame className="h-8 w-8 text-red-500" />} loading={false} data={{ value: attribute?.["heat"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ heat: !attribute?.["heat"] })}>{attribute?.["heat"] ? "Tắt" : "Bật"}</Button>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Đèn chiếu sáng" icon={<Lightbulb className="h-8 w-8 text-yellow-500" />} loading={false} data={{ value: attribute?.["light"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ light: !attribute?.["light"] })}>{attribute?.["light"] ? "Tắt" : "Bật"}</Button>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Quạt" icon={<Fan className="h-8 w-8 text-blue-500" />} loading={false} data={{ value: attribute?.["fan"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ fan: !attribute?.["fan"] })}>{attribute?.["fan"] ? "Tắt" : "Bật"}</Button>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Tưới nhỏ giọt" icon={<Droplet className="h-8 w-8 text-emerald-500" />} loading={false} data={{ value: attribute?.["drip"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ drip: !attribute?.["drip"] })}>{attribute?.["drip"] ? "Tắt" : "Bật"}</Button>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Phun sương" icon={<CloudFog className="h-8 w-8 text-cyan-500" />} loading={false} data={{ value: attribute?.["mist"] }} isBoolean booleanArr={["Bật","Tắt"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ mist: !attribute?.["mist"] })}>{attribute?.["mist"] ? "Tắt" : "Bật"}</Button>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Rèm mở" icon={<PanelRightOpen className="h-8 w-8 text-gray-500" />} loading={false} data={{ value: attribute?.["curtain_open"] }} isBoolean booleanArr={["Mở","Đóng"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: true, curtain_close: false })}>Mở</Button>
-                  </LatestTelemetryCard>
-                  <LatestTelemetryCard title="Rèm đóng" icon={<PanelRightClose className="h-8 w-8 text-gray-700" />} loading={false} data={{ value: attribute?.["curtain_close"] }} isBoolean booleanArr={["Đóng","Mở"]}>
-                    <Button className="mt-2" onClick={() => onClickDevice({ curtain_open: false, curtain_close: true })}>Đóng</Button>
-                  </LatestTelemetryCard>
-                </div>
-              )}
-            </div>
-          )}
+        <CardContent className="flex items-center gap-4">
+          <Badge variant={powerOn ? "default" : "secondary"}>{powerOn ? "ON" : "OFF"}</Badge>
+          <Button disabled={loading} onClick={() => onTogglePower(true)}>ON</Button>
+          <Button variant="destructive" disabled={loading} onClick={() => onTogglePower(false)}>OFF</Button>
         </CardContent>
       </Card>
 
-      {/* Combined chart for 4 metrics */}
-      <TelemetryMultiChart
-        token={typeof window !== "undefined" ? (localStorage.getItem("token") || "") : ""}
-        entityId={deviceId}
-        startTs={0}
-        endTs={now}
-        refreshMs={60000}
-      />
+      {/* Top-level mode indicator */}
+      <Card>
+        <CardContent className="flex items-center gap-3 py-4">
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-md ${isAutoMode ? "bg-green-50" : "bg-red-50"}`}>
+            <span className={`h-3 w-3 rounded-full ${isAutoMode ? "bg-green-500" : "bg-red-500"}`} />
+            <span className="text-base font-semibold">Chế độ: {isAutoMode ? "Auto" : "Manual"}</span>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Bảng dữ liệu cảm biến (200 dòng tối đa) */}
-      {table}
+      {/* System content below POWER; blur when OFF */}
+      {!powerOn && (
+        <div className="rounded-md border p-3 text-sm text-muted-foreground">Hệ thống đang tắt. Bật POWER để hiển thị.</div>
+      )}
+      {!isAutoMode && (
+        <div className="rounded-md border p-3 text-sm text-muted-foreground">Chế độ Manual: giao diện bị làm mờ và không thể thao tác.</div>
+      )}
+      <div className={powerOn && isAutoMode ? "space-y-6" : "space-y-6 opacity-50 pointer-events-none select-none"}>
+        {/* Mode + Controls/Threshold in one card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {isAutoMode ? <PanelRightOpen className="h-5 w-5" /> : <PanelRightClose className="h-5 w-5" />}
+              Auto Control or Auto Sensor
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Button disabled={!isAutoMode} variant={isAutoControl ? "default" : "secondary"} onClick={setAutoControl}>Auto Control</Button>
+              <Button disabled={!isAutoMode} variant={!isAutoControl ? "default" : "secondary"} onClick={setAutoSensor}>Auto Sensor</Button>
+            </div>
+
+            {isAutoMode && isAutoControl ? (
+              // Show device control buttons when Auto + Auto Control
+              <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
+                <LatestTelemetryCard title="Bóng đèn sưởi" icon={<Flame className="h-8 w-8 text-red-500" />} loading={false} data={{ value: attribute?.heat }} isBoolean booleanArr={["ON","OFF"]}>
+                  <Button className="mt-2" onClick={() => onClickDevice({ heat: !attribute?.heat })}>{attribute?.heat ? "OFF" : "ON"}</Button>
+                </LatestTelemetryCard>
+                <LatestTelemetryCard title="Đèn chiếu sáng" icon={<Lightbulb className="h-8 w-8 text-yellow-500" />} loading={false} data={{ value: attribute?.light }} isBoolean booleanArr={["ON","OFF"]}>
+                  <Button className="mt-2" onClick={() => onClickDevice({ light: !attribute?.light })}>{attribute?.light ? "OFF" : "ON"}</Button>
+                </LatestTelemetryCard>
+                <LatestTelemetryCard title="Quạt" icon={<Fan className="h-8 w-8 text-blue-500" />} loading={false} data={{ value: attribute?.fan }} isBoolean booleanArr={["ON","OFF"]}>
+                  <Button className="mt-2" onClick={() => onClickDevice({ fan: !attribute?.fan })}>{attribute?.fan ? "OFF" : "ON"}</Button>
+                </LatestTelemetryCard>
+                <LatestTelemetryCard title="Tưới nhỏ giọt" icon={<Droplet className="h-8 w-8 text-emerald-500" />} loading={false} data={{ value: attribute?.drip }} isBoolean booleanArr={["ON","OFF"]}>
+                  <Button className="mt-2" onClick={() => onClickDevice({ drip: !attribute?.drip })}>{attribute?.drip ? "OFF" : "ON"}</Button>
+                </LatestTelemetryCard>
+                <LatestTelemetryCard title="Phun sương" icon={<CloudFog className="h-8 w-8 text-cyan-500" />} loading={false} data={{ value: attribute?.mist }} isBoolean booleanArr={["ON","OFF"]}>
+                  <Button className="mt-2" onClick={() => onClickDevice({ mist: !attribute?.mist })}>{attribute?.mist ? "OFF" : "ON"}</Button>
+                </LatestTelemetryCard>
+                <LatestTelemetryCard title="Rèm" icon={<PanelRightOpen className="h-8 w-8 text-gray-500" />} loading={false} data={{ value: attribute?.curtain_open }} isBoolean booleanArr={["Mở","Đóng"]}>
+                  <div className="flex gap-2 mt-2">
+                    <Button onClick={() => onClickDevice({ curtain_open: true, curtain_close: false })}>Mở</Button>
+                    <Button variant="secondary" onClick={() => onClickDevice({ curtain_open: false, curtain_close: true })}>Đóng</Button>
+                  </div>
+                </LatestTelemetryCard>
+              </div>
+            ) : isAutoMode && !isAutoControl ? (
+              // Show threshold editor when Auto + Auto Sensor
+              <div className="grid gap-4 md:grid-cols-2 grid-cols-1">
+                <InputThreshold title="Temp high" targetKey="temp_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Temp low" targetKey="temp_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Hum high" targetKey="hum_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Hum low" targetKey="hum_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Soil high" targetKey="soil_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Soil low" targetKey="soil_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Light high" targetKey="light_high" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+                <InputThreshold title="Light low" targetKey="light_low" setEdit={setEdit} edit={edit} attribute={attribute} onSave={onSave} />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {/* Latest sensors */}
+        <div className="grid gap-4 md:grid-cols-3 grid-cols-1">
+          <LatestTelemetryCard title="Nhiệt độ" icon={<ThermometerSun className="h-8 w-8 text-orange-500" />} data={latestData?.["air_temp"]?.[0]} loading={loading} unit="°C" />
+          <LatestTelemetryCard title="Độ ẩm" icon={<Droplet className="h-8 w-8 text-blue-500" />} data={latestData?.["air_hum"]?.[0]} loading={loading} unit="%" />
+          <LatestTelemetryCard title="Ánh sáng" icon={<SunMedium className="h-8 w-8 text-yellow-500" />} data={latestData?.["lux"]?.[0]} loading={loading} unit="lx" />
+          <LatestTelemetryCard title="Độ ẩm đất" icon={<Sprout className="h-8 w-8 text-green-600" />} data={latestData?.["soil_moist"]?.[0]} loading={loading} unit="%" />
+          <LatestTelemetryCard title="WiFi" icon={<Wifi className="h-8 w-8 text-slate-500" />} data={latestData?.["wifi_connected"]?.[0]} loading={loading} isBoolean booleanArr={["ON","OFF"]} />
+          <LatestTelemetryCard title="Uptime" icon={<Timer className="h-8 w-8 text-teal-600" />} data={latestData?.["uptime"]?.[0]} loading={loading} unit="s" />
+        </div>
+
+        {/* Relay status via telemetry */}
+        <Card>
+          <CardHeader><CardTitle>Trạng thái thiết bị</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-3 grid-cols-1">
+            <LatestTelemetryCard title="Quạt" icon={<Fan className="h-8 w-8 text-blue-500" />} data={latestData?.["fan_on"]?.[0]} loading={loading} isBoolean booleanArr={["ON","OFF"]} />
+            <LatestTelemetryCard title="Sưởi" icon={<Flame className="h-8 w-8 text-red-500" />} data={latestData?.["heater_on"]?.[0]} loading={loading} isBoolean booleanArr={["ON","OFF"]} />
+            <LatestTelemetryCard title="Đèn" icon={<Lightbulb className="h-8 w-8 text-yellow-500" />} data={latestData?.["light_on"]?.[0]} loading={loading} isBoolean booleanArr={["ON","OFF"]} />
+            <LatestTelemetryCard title="Phun sương" icon={<CloudFog className="h-8 w-8 text-cyan-500" />} data={latestData?.["mist_on"]?.[0]} loading={loading} isBoolean booleanArr={["ON","OFF"]} />
+            <LatestTelemetryCard title="Bơm" icon={<Droplet className="h-8 w-8 text-emerald-500" />} data={latestData?.["pump_on"]?.[0]} loading={loading} isBoolean booleanArr={["ON","OFF"]} />
+          </CardContent>
+        </Card>
+
+        {/* Combined chart */}
+        <TelemetryMultiChart
+          token={typeof window !== "undefined" ? (localStorage.getItem("token") || "") : ""}
+          entityId={deviceId}
+          startTs={0}
+          endTs={now}
+          refreshMs={60000}
+        />
+
+        {/* Table */}
+        {table}
+      </div>
     </div>
   );
 };
 
 export default DashboardPage;
+

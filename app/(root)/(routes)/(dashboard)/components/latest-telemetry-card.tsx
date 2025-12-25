@@ -53,8 +53,10 @@ const LatestTelemetryCard: React.FC<LatestTelemetryCardProps> = ({
             </p>
           )}
         </div>
-        <div className="text-sm from-muted-foreground text-gray-400">
-          Cập nhật {moment(data?.["ts"]).format("HH:mm:ss DD/MM/YYYY")}
+        <div className="text-sm from-muted-foreground text-gray-400" suppressHydrationWarning>
+          {data?.["ts"]
+            ? `Cập nhật ${moment(data?.["ts"]).format("HH:mm:ss DD/MM/YYYY")}`
+            : "Cập nhật -"}
         </div>
         {children}
       </CardContent>
